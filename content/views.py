@@ -4,8 +4,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from content.models import Content, Follow
-from content.permissions import AdminOrReadOnly
-from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer
+from user.permissions import AdminOrReadOnly
+from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer
 
 
 class ContentViewSet(viewsets.ModelViewSet):
@@ -40,9 +40,11 @@ class ContentViewSet(viewsets.ModelViewSet):
 
 
 class FollowViewSet(viewsets.ModelViewSet):
-    permission_classes = [AdminOrReadOnly]
-    serializer_class = FollowSerializer
-
+    def destroy(self, request, *args, **kwargs):
+        follow = self.get_object()
+        if follow.user != request.user and request.user.is_staff == False:
+            return Response({"error": "You can delete only your owns follows"}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -51,3 +53,15 @@ class FollowViewSet(viewsets.ModelViewSet):
         if self.request.user and self.request.user.is_staff:
             return Follow.objects.select_related("user", "content")
         return Follow.objects.select_related("user", "content").filter(user=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return FollowCreateSerializer
+        return FollowSerializer
+
+    @action(methods=["DELETE"], detail=True, url_path="unfollow")
+    def unfollow(self, request, pk=None):
+        follow = self.get_object()
+        follow_id = follow.id
+        follow.delete()
+        return Response({"message": f"Follow wit id {follow_id} deleted"}, status=status.HTTP_200_OK)
