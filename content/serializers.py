@@ -13,6 +13,14 @@ class ContentSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class ContentAdminSerializer(ContentSerializer):
+    followers = serializers.SlugRelatedField(slug_field="user.pk", many=True, read_only=True)
+
+    class Meta:
+        model = Content
+        fields = ["id", "title", "body", "created_at", "updated_at", "followers"]
+
+
 class FollowSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="email", read_only=True)
     content = serializers.SlugRelatedField(slug_field="title", read_only=True)

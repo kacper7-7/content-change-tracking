@@ -4,12 +4,25 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from content.models import Content, Follow
-from content.serializers import ContentSerializer, FollowSerializer
+from content.permissions import AdminOrReadOnly
+from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer
 
 
 class ContentViewSet(viewsets.ModelViewSet):
-    serializer_class = ContentSerializer
-    queryset = Content.objects.all()
+    permission_classes = [AdminOrReadOnly]
+
+    def get_queryset(self):
+        if self.request.user and self.request.user.is_staff:
+            return Content.objects.prefetch_related("followers")
+        return Content.objects.prefetch_related("followers").filter(followers__user=self.request.user)
+
+
+    def get_serializer_class(self):
+        if self.request.user and self.request.user.is_staff:
+            return ContentAdminSerializer
+        return ContentSerializer
+
+
 
     @action(methods=["GET"], url_path="updated-contents", detail=False)
     def update_contents(self, request):
@@ -27,9 +40,14 @@ class ContentViewSet(viewsets.ModelViewSet):
 
 
 class FollowViewSet(viewsets.ModelViewSet):
+    permission_classes = [AdminOrReadOnly]
     serializer_class = FollowSerializer
-    queryset = Follow.objects.select_related("user", "content")
 
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user and self.request.user.is_staff:
+            return Follow.objects.select_related("user", "content")
+        return Follow.objects.select_related("user", "content").filter(user=self.request.user)
