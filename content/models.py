@@ -9,6 +9,8 @@ class Content(models.Model):
     body = models.TextField()
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    edited_count = models.IntegerField(default=0)
+
 
     def __str__(self):
         return self.title
@@ -37,3 +39,13 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.user} follows {self.content}"
+
+
+class ContentEditHistory(models.Model):
+    content = models.ForeignKey(
+        'Content',
+        on_delete=models.CASCADE,
+        related_name='edit_history'
+    )
+
+    edited_at = models.DateTimeField(auto_now_add=True)

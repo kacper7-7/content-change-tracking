@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from user.permissions import AdminOrReadOnly
-from user.serializers import UserSerializer
+from user.serializers import UserSerializer, CreateUserSerializer
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -20,3 +20,8 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.request.user and self.request.user.is_staff:
             return queryset
         return queryset.filter(pk=self.request.user.pk)
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return CreateUserSerializer
+        return UserSerializer

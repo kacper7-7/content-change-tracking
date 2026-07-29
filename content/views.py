@@ -1,6 +1,10 @@
-from django.db.models import F
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.db.models import F, Case, When, Value
+from django.db.models.fields import BooleanField
+from django.template.defaultfilters import default
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from content.models import Content, Follow
@@ -9,12 +13,16 @@ from content.serializers import ContentSerializer, FollowSerializer, ContentAdmi
 
 
 class ContentViewSet(viewsets.ModelViewSet):
-    permission_classes = [AdminOrReadOnly]
+    permission_classes = [AdminOrReadOnly, IsAuthenticated]
 
     def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return Content.objects.none()
+
+        queryset = Content.objects.prefetch_related("followers", "edit_history")
         if self.request.user and self.request.user.is_staff:
-            return Content.objects.prefetch_related("followers")
-        return Content.objects.prefetch_related("followers").filter(followers__user=self.request.user)
+            return queryset
+        return queryset.filter(followers__user=self.request.user)
 
 
     def get_serializer_class(self):
@@ -50,9 +58,17 @@ class FollowViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     def get_queryset(self):
+        queryset = Follow.objects.select_related("user", "content").annotate(
+            has_new_changes = Case(
+                When(content__updated_at__gt=F("last_viewed_at"),
+                     then=Value(True)), default=Value(False),
+                     output_field=BooleanField()
+            )
+        )
+
         if self.request.user and self.request.user.is_staff:
-            return Follow.objects.select_related("user", "content")
-        return Follow.objects.select_related("user", "content").filter(user=self.request.user)
+            return queryset
+        return queryset.filter(user=self.request.user)
 
     def get_serializer_class(self):
         if self.action == "create":
