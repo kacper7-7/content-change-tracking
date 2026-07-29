@@ -1,6 +1,7 @@
 from django.contrib.auth.base_user import AbstractBaseUser
-from django.db.models import F, Case, When, Value
+from django.db.models import F, Case, When, Value, Model
 from django.db.models.fields import BooleanField
+from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -13,15 +14,12 @@ from content.serializers import ContentSerializer, FollowSerializer, ContentAdmi
 
 
 class ContentViewSet(viewsets.ModelViewSet):
-    permission_classes = [AdminOrReadOnly, IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return Content.objects.none()
-
         queryset = Content.objects.prefetch_related("followers", "edit_history")
-        # if self.request.user and self.request.user.is_staff:
-        #     return queryset
         return queryset
 
 
@@ -30,6 +28,38 @@ class ContentViewSet(viewsets.ModelViewSet):
         if self.request.user and self.request.user.is_staff:
             return ContentAdminSerializer
         return ContentSerializer
+
+    def perform_create(self, serializer):
+        new_content = serializer.save(author=self.request.user)
+        Follow.objects.create(
+            user=self.request.user,
+            content=new_content
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        content = self.get_object()
+        follow = content.followers.filter(user=request.user).first()
+
+        if follow:
+            follow.last_viewed_at = timezone.now()
+            follow.save(update_fields=["last_viewed_at"])
+        return super().retrieve(request, *args, **kwargs)
+
+
+    def update(self, request, *args, **kwargs):
+        content = self.get_object()
+
+        if request.user != content.author:
+            return Response({"error": "You can only update your own posts."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        content = self.get_object()
+
+        if request.user != content.author:
+            return Response({"error": "You can only delete your own posts."}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
 
 
 
@@ -44,7 +74,7 @@ class ContentViewSet(viewsets.ModelViewSet):
             followers__in=updated_follows
         )
 
-        serializer = ContentSerializer(updated_contents, many=True)
+        serializer = ContentSerializer(updated_contents, many=True, context=self.request)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

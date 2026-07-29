@@ -11,19 +11,20 @@ class ContentEditHistorySerializer(serializers.ModelSerializer):
 
 class ContentSerializer(serializers.ModelSerializer):
     edit_history = ContentEditHistorySerializer(many=True, read_only=True)
+
     class Meta:
         model = Content
-        fields = ["id", "title", "body", "created_at", "updated_at", "edited_count", "edit_history"]
-        read_only_fields = ["edited_count"]
+        fields = ["id", "title", "body", "author", "created_at", "updated_at", "edited_count", "edit_history"]
+        read_only_fields = ["edited_count", "author"]
 
 
     def update(self, instance, validated_data):
-        instance.updated_at = timezone.now()
         ContentEditHistory.objects.create(
             content=instance,
         )
         instance.edited_count += 1
         return super().update(instance, validated_data)
+
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

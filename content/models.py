@@ -7,6 +7,7 @@ from django.utils import timezone
 class Content(models.Model):
     title = models.CharField(max_length=255)
     body = models.TextField()
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="contents", on_delete=models.CASCADE)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_count = models.IntegerField(default=0)
