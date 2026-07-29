@@ -10,7 +10,7 @@ class ContentAdmin(ModelAdmin):
     list_display_links = ('id', 'title')
     search_fields = ('title', 'body')
     list_filter = ('created_at', 'updated_at')
-    readonly_fields = ('created_at', 'updated_at')
+    read_only_fields = ('created_at', 'updated_at')
 
 @admin.register(Follow)
 class FollowAdmin(ModelAdmin):
@@ -18,6 +18,6 @@ class FollowAdmin(ModelAdmin):
     search_fields = ("user__email", "content__title")
     list_filter = ("last_viewed_at",)
     list_select_related = ("user", "content")
-    readonly_field = ("last_viewed_at",)
+    read_only_field = ("last_viewed_at",)
     raw_id_fields = ("user", "content")
 

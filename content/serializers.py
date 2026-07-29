@@ -1,10 +1,10 @@
+from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from rest_framework import serializers
 from content.models import Content, Follow, ContentEditHistory
 
 
 class ContentEditHistorySerializer(serializers.ModelSerializer):
-    # content = serializers.SlugRelatedField
     class Meta:
         model = ContentEditHistory
         fields = ["content", "edited_at"]
@@ -25,6 +25,22 @@ class ContentSerializer(serializers.ModelSerializer):
         instance.edited_count += 1
         return super().update(instance, validated_data)
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        request = self.context.get("request")
+
+        if request and request.user and not request.user.is_staff:
+            is_following = any(follow.user.id == request.user.id for follow in instance.followers.all())
+
+            if not is_following:
+                return {
+                    "id": data.get("id"),
+                    "title": data.get("title"),
+                    "created_at": data.get("created_at")
+                }
+        return data
+
 
 class ContentAdminSerializer(ContentSerializer):
     followers = serializers.SlugRelatedField(slug_field="user.pk", many=True, read_only=True)
@@ -33,6 +49,11 @@ class ContentAdminSerializer(ContentSerializer):
         model = Content
         fields = ["id", "title", "body", "created_at", "updated_at", "followers",  "edited_count", "edit_history"]
         read_only_fields = ["edited_count"]
+
+class ContentNotFollowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Content
+        fields = ["id", "title", "created_at"]
 
 class FollowSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="email", read_only=True)

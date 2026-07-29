@@ -1,7 +1,6 @@
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db.models import F, Case, When, Value
 from django.db.models.fields import BooleanField
-from django.template.defaultfilters import default
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +8,8 @@ from rest_framework.response import Response
 
 from content.models import Content, Follow
 from user.permissions import AdminOrReadOnly
-from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer
+from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer, \
+    ContentNotFollowSerializer
 
 
 class ContentViewSet(viewsets.ModelViewSet):
@@ -20,12 +20,13 @@ class ContentViewSet(viewsets.ModelViewSet):
             return Content.objects.none()
 
         queryset = Content.objects.prefetch_related("followers", "edit_history")
-        if self.request.user and self.request.user.is_staff:
-            return queryset
-        return queryset.filter(followers__user=self.request.user)
+        # if self.request.user and self.request.user.is_staff:
+        #     return queryset
+        return queryset
 
 
     def get_serializer_class(self):
+
         if self.request.user and self.request.user.is_staff:
             return ContentAdminSerializer
         return ContentSerializer
@@ -74,10 +75,3 @@ class FollowViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return FollowCreateSerializer
         return FollowSerializer
-
-    @action(methods=["DELETE"], detail=True, url_path="unfollow")
-    def unfollow(self, request, pk=None):
-        follow = self.get_object()
-        follow_id = follow.id
-        follow.delete()
-        return Response({"message": f"Follow wit id {follow_id} deleted"}, status=status.HTTP_200_OK)
