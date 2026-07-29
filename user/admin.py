@@ -1,8 +1,41 @@
 from django.contrib import admin
-from django.contrib.admin import ModelAdmin
+from django.contrib.auth.admin import UserAdmin
+from django.utils.translation import gettext_lazy as _
 from user.models import User
 
 
 @admin.register(User)
-class UserAdmin(ModelAdmin):
-    pass
+class UserAdmin(UserAdmin):
+    ordering = ["email"]
+
+    list_display = ["email", "first_name", "last_name", "is_staff"]
+
+    search_fields = ["email", "first_name", "last_name"]
+
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name")}),
+        (
+            _("Permissions"),
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("email", "password"),
+            },
+        ),
+    )

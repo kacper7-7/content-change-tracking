@@ -11,7 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["is_staff"]
 
     def update(self, instance, validated_data):
-        password = validated_data.get("password", None)
+        password = validated_data.pop("password", None)
         user = super().update(instance, validated_data)
 
         if password:
