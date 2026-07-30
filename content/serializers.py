@@ -18,14 +18,6 @@ class ContentSerializer(serializers.ModelSerializer):
         read_only_fields = ["edited_count", "author"]
 
 
-    def update(self, instance, validated_data):
-        ContentEditHistory.objects.create(
-            content=instance,
-        )
-        instance.edited_count += 1
-        return super().update(instance, validated_data)
-
-
     def to_representation(self, instance):
         data = super().to_representation(instance)
 

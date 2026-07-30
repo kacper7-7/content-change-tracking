@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from content.models import Content, Follow
+from content.models import Content, Follow, ContentEditHistory
 from user.permissions import AdminOrReadOnly
 from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer, \
     ContentNotFollowSerializer
@@ -72,10 +72,26 @@ class ContentViewSet(viewsets.ModelViewSet):
 
         updated_contents = Content.objects.filter(
             followers__in=updated_follows
+        ).order_by("-updated_at")
+
+
+        page = self.paginate_queryset(updated_contents)
+        if page is not None:
+            serializer = ContentSerializer(page, many=True, context=self.get_serializer_context())
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ContentSerializer(updated_contents, many=True, context=self.get_serializer_context())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        ContentEditHistory.objects.create(
+            content=instance,
         )
 
-        serializer = ContentSerializer(updated_contents, many=True, context=self.request)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        instance.edited_count = F("edited_count") + 1
+        instance.save(update_fields=["edited_count"])
 
 
 class FollowViewSet(viewsets.ModelViewSet):
