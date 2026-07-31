@@ -22,9 +22,8 @@ class ContentSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
 
         if request and request.user and not request.user.is_staff:
-            is_following = any(follow.user.id == request.user.id for follow in instance.followers.all())
 
-            if not is_following:
+            if not getattr(instance, "is_followed_by_me", False):
                 return {
                     "id": data.get("id"),
                     "title": data.get("title"),

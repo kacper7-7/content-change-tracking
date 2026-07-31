@@ -1,4 +1,4 @@
-from django.db.models import F, Case, When, Value, Model
+from django.db.models import F, Case, When, Value, Model, Exists, OuterRef
 from django.db.models.fields import BooleanField
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -17,7 +17,15 @@ class ContentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return Content.objects.none()
-        queryset = Content.objects.prefetch_related("followers", "edit_history")
+        queryset = Content.objects.prefetch_related("edit_history").annotate(
+            is_followed_by_me=Exists(
+                Follow.objects.filter(content=OuterRef("pk"), user=self.request.user)
+            )
+        )
+
+        if self.request.user.is_staff:
+            queryset = queryset.prefetch_related("followers")
+
         return queryset
 
 
@@ -100,14 +108,14 @@ class ContentViewSet(viewsets.ModelViewSet):
         page = self.paginate_queryset(updated_contents)
         if page is not None:
             serializer = ContentSerializer(page, many=True, context=self.get_serializer_context())
-            response_data = self.get_paginated_response(serializer.data)
+            response_data = self.get_paginated_response(serializer.data).data
         else:
             serializer = ContentSerializer(updated_contents, many=True, context=self.get_serializer_context())
             response_data = serializer.data
 
         cache.set(cache_key, response_data, timeout=300)
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 
