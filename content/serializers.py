@@ -1,5 +1,3 @@
-from django.contrib.auth.models import AbstractUser
-from django.utils import timezone
 from rest_framework import serializers
 from content.models import Content, Follow, ContentEditHistory
 
@@ -44,10 +42,6 @@ class ContentAdminSerializer(ContentSerializer):
         fields = ["id", "title", "body", "created_at", "updated_at", "followers",  "edited_count", "edit_history"]
         read_only_fields = ["edited_count"]
 
-class ContentNotFollowSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Content
-        fields = ["id", "title", "created_at"]
 
 class FollowSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="email", read_only=True)

@@ -1,4 +1,3 @@
-from django.contrib.auth.base_user import AbstractBaseUser
 from django.db.models import F, Case, When, Value, Model
 from django.db.models.fields import BooleanField
 from django.utils import timezone
@@ -6,13 +5,10 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
 from content.models import Content, Follow, ContentEditHistory
-from notification.models import Notification
 from notification.tasks import create_notification_for_followers_content
-from user.permissions import AdminOrReadOnly
-from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer, \
-    ContentNotFollowSerializer
+from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer
+from django.core.cache import cache
 
 
 class ContentViewSet(viewsets.ModelViewSet):
@@ -45,6 +41,8 @@ class ContentViewSet(viewsets.ModelViewSet):
         if follow:
             follow.last_viewed_at = timezone.now()
             follow.save(update_fields=["last_viewed_at"])
+
+        cache.delete_pattern(f"updated_contents_user_{request.user.pk}_page_*")
         return super().retrieve(request, *args, **kwargs)
 
 
@@ -66,11 +64,29 @@ class ContentViewSet(viewsets.ModelViewSet):
             return Response({"error": "You can only delete your own posts."}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        ContentEditHistory.objects.create(
+            content=instance,
+        )
+
+        instance.edited_count = F("edited_count") + 1
+        instance.save(update_fields=["edited_count"])
+        cache.delete_pattern(f"updated_contents_user_{self.request.user.pk}_page_*")
 
 
 
     @action(methods=["GET"], url_path="updated-contents", detail=False)
     def update_contents(self, request):
+        page_number = request.query_params.get("page", 1)
+        cache_key = f"updated_contents_user_{request.user.pk}_page_{page_number}"
+
+        cache_data = cache.get(cache_key)
+
+        if cache_data:
+            return Response(cache_data, status=status.HTTP_200_OK)
+
         updated_follows = Follow.objects.filter(
             user=request.user,
             content__updated_at__gt=F("last_viewed_at")
@@ -84,20 +100,15 @@ class ContentViewSet(viewsets.ModelViewSet):
         page = self.paginate_queryset(updated_contents)
         if page is not None:
             serializer = ContentSerializer(page, many=True, context=self.get_serializer_context())
-            return self.get_paginated_response(serializer.data)
+            response_data = self.get_paginated_response(serializer.data)
+        else:
+            serializer = ContentSerializer(updated_contents, many=True, context=self.get_serializer_context())
+            response_data = serializer.data
 
-        serializer = ContentSerializer(updated_contents, many=True, context=self.get_serializer_context())
+        cache.set(cache_key, response_data, timeout=300)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def perform_update(self, serializer):
-        instance = serializer.save()
-
-        ContentEditHistory.objects.create(
-            content=instance,
-        )
-
-        instance.edited_count = F("edited_count") + 1
-        instance.save(update_fields=["edited_count"])
 
 
 class FollowViewSet(viewsets.ModelViewSet):
