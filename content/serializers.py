@@ -30,7 +30,8 @@ class ContentSerializer(serializers.ModelSerializer):
                 return {
                     "id": data.get("id"),
                     "title": data.get("title"),
-                    "created_at": data.get("created_at")
+                    "created_at": data.get("created_at"),
+                    "message": "To see more info, follow this content!"
                 }
         return data
 
