@@ -8,6 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from content.models import Content, Follow, ContentEditHistory
+from notification.models import Notification
+from notification.tasks import create_notification_for_followers_content
 from user.permissions import AdminOrReadOnly
 from content.serializers import ContentSerializer, FollowSerializer, ContentAdminSerializer, FollowCreateSerializer, \
     ContentNotFollowSerializer
@@ -51,7 +53,11 @@ class ContentViewSet(viewsets.ModelViewSet):
 
         if request.user != content.author:
             return Response({"error": "You can only update your own posts."}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+
+        response = super().update(request, *args, **kwargs)
+        create_notification_for_followers_content.delay(content.pk)
+
+        return response
 
     def destroy(self, request, *args, **kwargs):
         content = self.get_object()
