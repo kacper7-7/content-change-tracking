@@ -1,4 +1,6 @@
-from django.db.models import F, Case, When, Value, Model, Exists, OuterRef
+from datetime import timedelta
+
+from django.db.models import F, Case, When, Value, Model, Exists, OuterRef, Count, Q
 from django.db.models.fields import BooleanField
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -20,7 +22,14 @@ class ContentViewSet(viewsets.ModelViewSet):
         queryset = Content.objects.prefetch_related("edit_history").annotate(
             is_followed_by_me=Exists(
                 Follow.objects.filter(content=OuterRef("pk"), user=self.request.user)
-            )
+            ),
+            followers_count=Count(F("followers"), distinct=True),
+            is_hot=Case(
+                When(Q(followers_count__gt=5) | Q(edited_count__gt=10), then=Value(True)),
+                default=False,
+                output_field=BooleanField()
+            ),
+            recent_edits_count=Count("edit_history", filter=Q(edit_history__edited_at__gte=timezone.now() - timedelta(days=7)))
         )
 
         if self.request.user.is_staff:
