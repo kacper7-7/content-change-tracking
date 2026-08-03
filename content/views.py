@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import F, Case, When, Value, Model, Exists, OuterRef, Count, Q
+from django.db.models import F, Case, When, Value, Model, Exists, OuterRef, Count, Q, Max
 from django.db.models.fields import BooleanField
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -19,7 +19,7 @@ class ContentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return Content.objects.none()
-        queryset = Content.objects.prefetch_related("edit_history").annotate(
+        queryset = Content.objects.select_related("author").prefetch_related("edit_history").annotate(
             is_followed_by_me=Exists(
                 Follow.objects.filter(content=OuterRef("pk"), user=self.request.user)
             ),
@@ -29,7 +29,8 @@ class ContentViewSet(viewsets.ModelViewSet):
                 default=False,
                 output_field=BooleanField()
             ),
-            recent_edits_count=Count("edit_history", filter=Q(edit_history__edited_at__gte=timezone.now() - timedelta(days=7)))
+            recent_edits_count=Count("edit_history", filter=Q(edit_history__edited_at__gte=timezone.now() - timedelta(days=7))),
+            last_edit_date=Max("edit_history__edited_at")
         )
 
         if self.request.user.is_staff:
@@ -144,7 +145,8 @@ class FollowViewSet(viewsets.ModelViewSet):
                 When(content__updated_at__gt=F("last_viewed_at"),
                      then=Value(True)), default=Value(False),
                      output_field=BooleanField()
-            )
+            ),
+            missed_edits_count=Count("content__edit_history", filter=Q(content__edit_history__edited_at__gt=F("last_viewed_at")))
         )
 
         if self.request.user and self.request.user.is_staff:
