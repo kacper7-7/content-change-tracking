@@ -9,10 +9,29 @@ class ContentEditHistorySerializer(serializers.ModelSerializer):
 
 class ContentSerializer(serializers.ModelSerializer):
     edit_history = ContentEditHistorySerializer(many=True, read_only=True)
+    is_followed_by_me = serializers.BooleanField(read_only=True)
+    followers_count = serializers.IntegerField(read_only=True)
+    is_hot = serializers.BooleanField(read_only=True)
+    recent_edits_count = serializers.IntegerField(read_only=True)
+    last_edit_date = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Content
-        fields = ["id", "title", "body", "author", "created_at", "updated_at", "edited_count", "edit_history"]
+        fields = [
+            "id",
+            "title",
+            "body",
+            "author",
+            "created_at",
+            "updated_at",
+            "edited_count",
+            "edit_history",
+            "is_followed_by_me",
+            "followers_count",
+            "is_hot",
+            "recent_edits_count",
+            "last_edit_date",
+        ]
         read_only_fields = ["edited_count", "author"]
 
 
@@ -46,10 +65,10 @@ class FollowSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="email", read_only=True)
     content = serializers.SlugRelatedField(slug_field="title", read_only=True)
     has_new_changes = serializers.BooleanField(read_only=True)
-    
+    missed_edits_count = serializers.IntegerField(read_only=True)
     class Meta:
         model = Follow
-        fields = ["id", "user", "content", "last_viewed_at", "has_new_changes"]
+        fields = ["id", "user", "content", "last_viewed_at", "has_new_changes", "missed_edits_count"]
 
 
 class FollowCreateSerializer(serializers.ModelSerializer):
