@@ -12,8 +12,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == "create":
             return [AllowAny()]
-        return [AdminOrReadOnly()]
-
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         queryset = get_user_model().objects.prefetch_related("follows")
