@@ -169,6 +169,7 @@ class ContentViewSet(viewsets.ModelViewSet):
 
 class FollowViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "delete", "head", "options"]
+    permission_classes = [IsAuthenticated]
 
     def destroy(self, request, *args, **kwargs):
         follow = self.get_object()

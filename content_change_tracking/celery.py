@@ -14,6 +14,6 @@ app.autodiscover_tasks()
 app.conf.beat_schedule = {
     "delete-inactive-content-every-night": {
         "task": "content.tasks.delete_content_older_than_one_year",
-        "schedule": crontab("*")
+        "schedule": crontab(minute=0, hour=0),
     }
 }
