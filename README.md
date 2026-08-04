@@ -62,15 +62,23 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Step 3: Starting the Redis broker
+### Step 3: Environment Variables
+
+Create a `.env` file in the root directory of the project and add your Django secret key.
+
+```env
+SECRET_KEY=your-super-secret-key-here
+```
+
+### Step 4: Starting the Redis broker
 
 Redis is essential as a message broker for Celery and for caching.
 
 ```bash
-docker start moj_redis
+docker start my_redis
 ```
 
-### Step 4: Migrations and starting the server (Main terminal)
+### Step 5: Migrations and starting the server (Main terminal)
 
 Apply database migrations, create an admin account, and start the API server.
 
@@ -81,7 +89,7 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-### Step 5: Starting Celery Worker
+### Step 6: Starting Celery Worker
 
 This process handles asynchronous tasks, including sending notifications after editing a post.
 
@@ -89,7 +97,7 @@ This process handles asynchronous tasks, including sending notifications after e
 celery -A content_change_tracking worker --pool=solo -l INFO
 ```
 
-### Step 6: Starting Celery Beat
+### Step 7: Starting Celery Beat
 
 The scheduler process responsible for periodic tasks (e.g., nightly removal of old posts).
 
