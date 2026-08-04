@@ -1,32 +1,127 @@
-Definitely we should add edit counter and indicate what details in content have changed. If a user sees the counter has changed many times, they can see that content is still alive and author care about it. Users can also investigate exactly what details were changed, and they don't have to remember what the original content looked like. Presenting these details also saves time for users and build trust for platform.
+# Content Change Tracking API
 
+A modern API based on the Django framework and Django REST Framework, used for managing content, following posts, and tracking change history. The project utilizes an asynchronous architecture using Celery and Redis to handle notifications and periodic background tasks.
 
+## Main Features
 
-## Performance & Database Optimizations
+*   **User Management**: 
+    *   Custom user model logging in using an email address instead of a username.
+    *   Handling authorization and creating new accounts (public access to registration, hidden details for other users).
+*   **Content Management and Change Tracking**:
+    *   Creating, reading, and editing own content.
+    *   Tracking edit history (`ContentEditHistory`) and the number of modifications.
+    *   Caching system speeding up the retrieval of updated content.
+*   **Following and Notifications**:
+    *   Ability to follow specific posts.
+    *   Checking unread changes (`has_new_changes`) and the number of missed edits.
+    *   Asynchronous creation of notifications for followers when content is changed (using Celery).
+*   **Background Tasks (Celery)**:
+    *   Automatic deletion of inactive content older than a year using the Celery Beat scheduler.
 
-To ensure the application scales effectively for 10,000+ active users and prevents common database bottlenecks, several architectural and query-level optimizations were implemented:
+---
 
-### 1. N+1 Query Prevention (`select_related` & `prefetch_related`)
-* **`select_related("user", "content")`**: Used in `FollowViewSet` to fetch foreign key relationships using SQL `JOIN`s in a single query.
-* **`prefetch_related("followers", "edit_history")`**: Used in `ContentViewSet` to batch-fetch many-to-many and reverse foreign key relationships in separate optimized queries.
-* **Impact**: Eliminates the N+1 problem, reducing what would be hundreds of database queries per request down to just 1–2 queries.
+## Technologies
 
-### 2. Database-Level Computations (`annotate` & `F()` expressions)
-* Instead of fetching raw models into Python memory and iterating over them to check for updates, we offload this work directly to the database engine using `annotate()` combined with `Case`, `When`, and `F()`.
-* **Impact**: Computes flags like `has_new_changes` in microseconds on the database server, bypassing Python memory overhead and serialization penalties.
+*   **Language:** Python 3
+*   **Framework:** Django, Django REST Framework
+*   **Asynchrony:** Celery
+*   **Message Broker / Cache:** Redis, Docker
+*   **Documentation:** drf-spectacular (OpenAPI / Swagger UI)
+*   **Tests:** `django.test.TestCase` for models and views
 
-### 3. Concurrency Control & Atomic Increments
-* Used `instance.edited_count = F("edited_count") + 1` for update operations.
-* **Impact**: Executes atomic SQL increments directly in the database (`UPDATE content SET edited_count = edited_count + 1`). This completely prevents race conditions and lost updates caused by rapid consecutive clicks or parallel requests.
+---
 
-### 4. Granular Database Writes (`update_fields`)
-* Implemented `instance.save(update_fields=[...])` during `retrieve` and update operations (e.g., updating only `last_viewed_at` or `edited_count`).
-* **Impact**: Prevents overwriting the entire row in the database. Reduces SQL payload size, decreases write-lock times, and improves overall DB write throughput.
+## Running the project (Locally)
 
-### 5. Database Indexing (`db_index=True`)
-* Added database indexes to heavily queried timestamp columns (`updated_at` on `Content` and `last_viewed_at` on `Follow`).
-* **Impact**: Transforms costly Full Table Scans into logarithmic Index Scans during timestamp comparisons (`content__updated_at__gt=F("last_viewed_at")`), keeping response times fast as table sizes grow into millions of rows.
+To run all project components, follow the instructions below. 4 separate terminal sessions are required.
 
-### 6. API Pagination
-* Integrated DRF pagination (`PageNumberPagination` / `paginate_queryset`) on content endpoints.
-* **Impact**: Limits payload sizes, prevents memory exhaustion on the application server, and guarantees consistent latency even under heavy data load.
+### Step 1: Clone the repository
+
+First, clone the repository to your local machine and navigate into the project directory:
+
+```bash
+git clone https://github.com/kacper7-7/content-change-tracking.git
+cd content-change-tracking
+```
+
+### Step 2: Virtual Environment and Dependencies
+
+Create a virtual environment, activate it, and install the required packages.
+
+**On Linux/macOS:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**On Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Step 3: Starting the Redis broker
+
+Redis is essential as a message broker for Celery and for caching.
+
+```bash
+docker start moj_redis
+```
+
+### Step 4: Migrations and starting the server (Main terminal)
+
+Apply database migrations, create an admin account, and start the API server.
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+### Step 5: Starting Celery Worker
+
+This process handles asynchronous tasks, including sending notifications after editing a post.
+
+```bash
+celery -A content_change_tracking worker --pool=solo -l INFO
+```
+
+### Step 6: Starting Celery Beat
+
+The scheduler process responsible for periodic tasks (e.g., nightly removal of old posts).
+
+```bash
+celery -A content_change_tracking beat -l INFO
+```
+
+---
+
+## Available API Endpoints
+
+All core API endpoints are prefixed with `/api/`.
+
+| Resource | Endpoint | Available Methods | Description                                                                                 |
+| :--- | :--- | :--- |:--------------------------------------------------------------------------------------------|
+| **Users** | `/api/users/` | `GET`, `POST`, `PATCH` | Registration, retrieving profiles, and editing own account.                                 |
+| **Content** | `/api/content/` | `GET`, `POST`, `PATCH`, `DELETE` | Managing posts. Retrieving information about `recent_edits_count` or `followers_count`.     |
+| **Updated** | `/api/content/updated-contents/` | `GET` | Displays the latest modified content that the user follows (uses Cache).                    |
+| **Follows** | `/api/follows/` | `GET`, `POST`, `DELETE` | Following and unfollowing content.                                              |
+| **Notifications** | `/api/notifications/` | `GET` | Receiving notifications assigned to the logged-in user (`ReadOnlyModelViewSet`). |
+
+### Interactive API Documentation
+
+Once the server is running, you can explore and interact with the API using the auto-generated Swagger UI interface available at:
+*   **Swagger UI:** `http://127.0.0.1:8000/api/docs/`
+
+---
+
+## Running Tests
+
+The project has comprehensive automated tests written for all applications (users, content, notifications). To run the entire test suite, use the command:
+
+```bash
+python manage.py test
+```
