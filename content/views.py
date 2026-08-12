@@ -115,7 +115,10 @@ class ContentViewSet(viewsets.ModelViewSet):
                 {"error": "You can only delete your own posts."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().destroy(request, *args, **kwargs)
+
+        response = super().destroy(request, *args, **kwargs)
+
+        return response
 
     def perform_update(self, serializer):
         instance = serializer.save()
@@ -126,9 +129,12 @@ class ContentViewSet(viewsets.ModelViewSet):
 
         instance.edited_count = F("edited_count") + 1
         instance.save(update_fields=["edited_count"])
+        followers_ids = set(instance.followers.values_list("user_id", flat=True))
+        followers_ids.add(self.request.user.pk)
 
         if hasattr(cache, "delete_pattern"):
-            cache.delete_pattern(f"updated_contents_user_{self.request.user.pk}_page_*")
+            for user_id in followers_ids:
+                cache.delete_pattern(f"updated_contents_user_{user_id}_page_*")
         else:
             cache.clear()
 
@@ -180,7 +186,14 @@ class FollowViewSet(viewsets.ModelViewSet):
                 {"error": "You can delete only your owns follows"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().destroy(request, *args, **kwargs)
+        if hasattr(cache, "delete_pattern"):
+            cache.delete_pattern(f"updated_contents_user_{follow.user.pk}_page_*")
+        else:
+            cache.clear()
+
+        response = super().destroy(request, *args, **kwargs)
+
+        return response
 
     def perform_create(self, serializer):
         content = serializer.validated_data.get("content")
@@ -189,6 +202,10 @@ class FollowViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "You are already following this content!"})
 
         serializer.save(user=self.request.user)
+        if hasattr(cache, "delete_pattern"):
+            cache.delete_pattern(f"updated_contents_user_{self.request.user.pk}_page_*")
+        else:
+            cache.clear()
 
     def get_queryset(self):
         queryset = Follow.objects.select_related("user", "content").annotate(
