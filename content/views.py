@@ -146,9 +146,11 @@ class ContentViewSet(viewsets.ModelViewSet):
             user=request.user, content__updated_at__gt=F("last_viewed_at")
         )
 
-        updated_contents = Content.objects.filter(
-            followers__in=updated_follows
-        ).order_by("-updated_at")
+        updated_contents = (
+            self.get_queryset()
+            .filter(followers__in=updated_follows)
+            .order_by("-updated_at")
+        )
 
         page = self.paginate_queryset(updated_contents)
         if page is not None:
