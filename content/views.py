@@ -146,23 +146,31 @@ class ContentViewSet(viewsets.ModelViewSet):
         return response
 
     def perform_update(self, serializer):
-        instance = serializer.save()
+        content = self.get_object()
 
-        ContentEditHistory.objects.create(
-            content=instance,
+        has_changes = any(
+            getattr(content, field) != value
+            for field, value in serializer.validated_data.items()
         )
 
-        instance.edited_count = F("edited_count") + 1
-        instance.version = F("version") + 1
-        instance.save(update_fields=["edited_count", "version"])
-        followers_ids = set(instance.followers.values_list("user_id", flat=True))
-        followers_ids.add(self.request.user.pk)
+        instance = serializer.save()
 
-        if hasattr(cache, "delete_pattern"):
-            for user_id in followers_ids:
-                cache.delete_pattern(f"updated_contents_user_{user_id}_page_*")
-        else:
-            cache.clear()
+        if has_changes:
+            ContentEditHistory.objects.create(
+                content=instance,
+            )
+
+            instance.edited_count = F("edited_count") + 1
+            instance.version = F("version") + 1
+            instance.save(update_fields=["edited_count", "version"])
+            followers_ids = set(instance.followers.values_list("user_id", flat=True))
+            followers_ids.add(self.request.user.pk)
+
+            if hasattr(cache, "delete_pattern"):
+                for user_id in followers_ids:
+                    cache.delete_pattern(f"updated_contents_user_{user_id}_page_*")
+            else:
+                cache.clear()
 
     @action(methods=["GET"], url_path="updated-contents", detail=False)
     def update_contents(self, request):

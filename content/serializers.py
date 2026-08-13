@@ -94,22 +94,6 @@ class ContentDetailSerializer(ContentListSerializer):
             "last_edit_date",
         ]
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-
-        request = self.context.get("request")
-
-        if request and request.user and not request.user.is_staff:
-
-            if not getattr(instance, "is_followed_by_me", False):
-                return {
-                    "id": data.get("id"),
-                    "title": data.get("title"),
-                    "created_at": data.get("created_at"),
-                    "message": "To see more info, follow this content!",
-                }
-        return data
-
 
 class ContentAdminListSerializer(ContentListSerializer):
     followers = serializers.SlugRelatedField(
