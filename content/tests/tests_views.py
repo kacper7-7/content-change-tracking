@@ -127,10 +127,16 @@ class ContentViewSetTest(TestCase):
     def test_followers_count(self):
         url = reverse("content:content-list")
 
+        for _ in range(5):
+            user = get_user_model().objects.create_user(
+                email=f"user{_}@example.com", password="password"
+            )
+            Follow.objects.create(user=user, content=self.content)
+
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["followers_count"], 1)
+        self.assertEqual(response.data["results"][0]["followers_count"], 6)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_is_hot(self):
