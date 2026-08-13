@@ -22,9 +22,11 @@ from rest_framework.response import Response
 from content.models import Content, Follow, ContentEditHistory
 from notification.tasks import create_notification_for_followers_content
 from content.serializers import (
-    ContentSerializer,
+    ContentListSerializer,
+    ContentDetailSerializer,
     FollowSerializer,
-    ContentAdminSerializer,
+    ContentAdminListSerializer,
+    ContentAdminDetailSerializer,
     FollowCreateSerializer,
 )
 from django.core.cache import cache
@@ -34,18 +36,18 @@ class ContentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+
         if not self.request.user.is_authenticated:
             return Content.objects.none()
-        queryset = (
-            Content.objects.select_related("author")
-            .prefetch_related("edit_history")
-            .annotate(
+        queryset = Content.objects.select_related("author")
+        if self.action == "list":
+            queryset = queryset.annotate(
                 is_followed_by_me=Exists(
                     Follow.objects.filter(
                         content=OuterRef("pk"), user=self.request.user
                     )
                 ),
-                followers_count=Count(F("followers"), distinct=True),
+                followers_count=Count("followers", distinct=True),
                 is_hot=Case(
                     When(
                         Q(followers_count__gt=5) | Q(edited_count__gt=10),
@@ -54,6 +56,16 @@ class ContentViewSet(viewsets.ModelViewSet):
                     default=False,
                     output_field=BooleanField(),
                 ),
+                last_edit_date=Max("edit_history__edited_at"),
+            )
+        if self.action in ["retrieve", "update", "partial_update", "update_contents"]:
+            queryset = queryset.prefetch_related("edit_history").annotate(
+                is_followed_by_me=Exists(
+                    Follow.objects.filter(
+                        content=OuterRef("pk"), user=self.request.user
+                    )
+                ),
+                followers_count=Count(F("followers"), distinct=True),
                 recent_edits_count=Count(
                     "edit_history",
                     filter=Q(
@@ -61,9 +73,16 @@ class ContentViewSet(viewsets.ModelViewSet):
                     ),
                     distinct=True,
                 ),
+                is_hot=Case(
+                    When(
+                        Q(followers_count__gt=5) | Q(edited_count__gt=10),
+                        then=Value(True),
+                    ),
+                    default=False,
+                    output_field=BooleanField(),
+                ),
                 last_edit_date=Max("edit_history__edited_at"),
             )
-        )
 
         if self.request.user.is_staff:
             queryset = queryset.prefetch_related("followers")
@@ -73,8 +92,12 @@ class ContentViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
 
         if self.request.user and self.request.user.is_staff:
-            return ContentAdminSerializer
-        return ContentSerializer
+            if self.action == "list":
+                return ContentAdminListSerializer
+            return ContentAdminDetailSerializer
+        if self.action == "list":
+            return ContentListSerializer
+        return ContentDetailSerializer
 
     def perform_create(self, serializer):
         new_content = serializer.save(author=self.request.user)
@@ -163,12 +186,12 @@ class ContentViewSet(viewsets.ModelViewSet):
 
         page = self.paginate_queryset(updated_contents)
         if page is not None:
-            serializer = ContentSerializer(
+            serializer = ContentDetailSerializer(
                 page, many=True, context=self.get_serializer_context()
             )
             response_data = self.get_paginated_response(serializer.data).data
         else:
-            serializer = ContentSerializer(
+            serializer = ContentDetailSerializer(
                 updated_contents, many=True, context=self.get_serializer_context()
             )
             response_data = serializer.data
