@@ -28,7 +28,7 @@ class Follow(models.Model):
     )
 
     last_viewed_at = models.DateTimeField(default=timezone.now, db_index=True)
-    last_seen_version = models.IntegerField()
+    last_seen_version = models.IntegerField(default=0)
 
     class Meta:
         constraints = [
