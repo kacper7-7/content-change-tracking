@@ -73,6 +73,7 @@ class ContentViewSetTest(TestCase):
         }
 
         response = self.client.put(url, data=payload)
+
         self.content.refresh_from_db()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -106,6 +107,7 @@ class ContentViewSetTest(TestCase):
         }
 
         response_create = self.client.post(url, payload)
+        self.assertEqual(response_create.status_code, status.HTTP_201_CREATED)
 
         content = Content.objects.get(title="New-Content")
 
@@ -125,7 +127,7 @@ class ContentViewSetTest(TestCase):
         self.assertTrue(response.data["results"][0]["is_followed_by_me"])
 
     def test_followers_count(self):
-        url = reverse("content:content-list")
+        url = reverse("content:content-detail", kwargs={"pk": self.content.pk})
 
         for _ in range(5):
             user = get_user_model().objects.create_user(
@@ -136,7 +138,7 @@ class ContentViewSetTest(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["followers_count"], 6)
+        self.assertEqual(response.data["followers_count"], 6)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_is_hot(self):
@@ -161,22 +163,21 @@ class ContentViewSetTest(TestCase):
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_recent_edits_count(self):
-        url = reverse("content:content-list")
+        url = reverse("content:content-detail", kwargs={"pk": self.content.pk})
 
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["recent_edits_count"], 0)
+        self.assertEqual(response.data["recent_edits_count"], 0)
 
-        url_update = reverse("content:content-detail", kwargs={"pk": self.content.pk})
         payload = {"title": "New-tile"}
 
         for _ in range(11):
-            self.client.patch(url_update, data=payload)
+            self.client.patch(url, data=payload)
 
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["recent_edits_count"], 11)
+        self.assertEqual(response.data["recent_edits_count"], 11)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_last_edit_date(self):
