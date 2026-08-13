@@ -59,6 +59,7 @@ class ContentViewSet(viewsets.ModelViewSet):
                     filter=Q(
                         edit_history__edited_at__gte=timezone.now() - timedelta(days=7)
                     ),
+                    distinct=True,
                 ),
                 last_edit_date=Max("edit_history__edited_at"),
             )
@@ -85,7 +86,8 @@ class ContentViewSet(viewsets.ModelViewSet):
 
         if follow:
             follow.last_viewed_at = timezone.now()
-            follow.save(update_fields=["last_viewed_at"])
+            follow.last_seen_version = content.version
+            follow.save(update_fields=["last_viewed_at", "last_seen_version"])
 
         if hasattr(cache, "delete_pattern"):
             cache.delete_pattern(f"updated_contents_user_{request.user.pk}_page_*")
@@ -128,7 +130,8 @@ class ContentViewSet(viewsets.ModelViewSet):
         )
 
         instance.edited_count = F("edited_count") + 1
-        instance.save(update_fields=["edited_count"])
+        instance.version = F("version") + 1
+        instance.save(update_fields=["edited_count", "version"])
         followers_ids = set(instance.followers.values_list("user_id", flat=True))
         followers_ids.add(self.request.user.pk)
 
@@ -149,7 +152,7 @@ class ContentViewSet(viewsets.ModelViewSet):
             return Response(cache_data, status=status.HTTP_200_OK)
 
         updated_follows = Follow.objects.filter(
-            user=request.user, content__updated_at__gt=F("last_viewed_at")
+            user=request.user, content__version__gt=F("last_seen_version")
         )
 
         updated_contents = (
@@ -201,7 +204,10 @@ class FollowViewSet(viewsets.ModelViewSet):
         if Follow.objects.filter(user=self.request.user, content=content).exists():
             raise ValidationError({"detail": "You are already following this content!"})
 
-        serializer.save(user=self.request.user)
+        instance = serializer.save(user=self.request.user)
+        instance.last_seen_version = content.version
+        instance.save()
+
         if hasattr(cache, "delete_pattern"):
             cache.delete_pattern(f"updated_contents_user_{self.request.user.pk}_page_*")
         else:
@@ -210,14 +216,11 @@ class FollowViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Follow.objects.select_related("user", "content").annotate(
             has_new_changes=Case(
-                When(content__updated_at__gt=F("last_viewed_at"), then=Value(True)),
+                When(content__version__gt=F("last_seen_version"), then=Value(True)),
                 default=Value(False),
                 output_field=BooleanField(),
             ),
-            missed_edits_count=Count(
-                "content__edit_history",
-                filter=Q(content__edit_history__edited_at__gt=F("last_viewed_at")),
-            ),
+            missed_edits_count=F("content__version") - F("last_seen_version"),
         )
 
         if self.request.user and self.request.user.is_staff:
