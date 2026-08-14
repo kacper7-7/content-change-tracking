@@ -1,5 +1,9 @@
 from datetime import timedelta
+from xmlrpc.client import ResponseError
 
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.db import transaction
+from django.db.migrations import serializer
 from django.db.models import (
     F,
     Case,
@@ -105,18 +109,20 @@ class ContentViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         content = self.get_object()
-        follow = content.followers.filter(user=request.user).first()
 
-        if follow:
-            follow.last_viewed_at = timezone.now()
-            follow.last_seen_version = content.version
-            follow.save(update_fields=["last_viewed_at", "last_seen_version"])
+        if request.user.is_authenticated:
+            Follow.objects.filter(user=request.user, content=content).update(
+                last_viewed_at=timezone.now(), last_seen_version=content.version
+            )
 
         if hasattr(cache, "delete_pattern"):
             cache.delete_pattern(f"updated_contents_user_{request.user.pk}_page_*")
         else:
             cache.clear()
-        return super().retrieve(request, *args, **kwargs)
+
+        serial = self.get_serializer(content)
+
+        return Response(serial.data)
 
     def update(self, request, *args, **kwargs):
         content = self.get_object()
@@ -128,7 +134,6 @@ class ContentViewSet(viewsets.ModelViewSet):
             )
 
         response = super().update(request, *args, **kwargs)
-        create_notification_for_followers_content.delay(content.pk)
 
         return response
 
@@ -156,21 +161,28 @@ class ContentViewSet(viewsets.ModelViewSet):
         instance = serializer.save()
 
         if has_changes:
-            ContentEditHistory.objects.create(
-                content=instance,
-            )
+            with transaction.atomic():
+                ContentEditHistory.objects.create(
+                    content=instance,
+                )
 
-            instance.edited_count = F("edited_count") + 1
-            instance.version = F("version") + 1
-            instance.save(update_fields=["edited_count", "version"])
-            followers_ids = set(instance.followers.values_list("user_id", flat=True))
-            followers_ids.add(self.request.user.pk)
+                instance.edited_count = F("edited_count") + 1
+                instance.version = F("version") + 1
+                instance.save(update_fields=["edited_count", "version"])
+                transaction.on_commit(
+                    lambda: create_notification_for_followers_content.delay(content.pk)
+                )
 
-            if hasattr(cache, "delete_pattern"):
-                for user_id in followers_ids:
-                    cache.delete_pattern(f"updated_contents_user_{user_id}_page_*")
-            else:
-                cache.clear()
+                followers_ids = set(
+                    instance.followers.values_list("user_id", flat=True)
+                )
+                followers_ids.add(self.request.user.pk)
+
+                if hasattr(cache, "delete_pattern"):
+                    for user_id in followers_ids:
+                        cache.delete_pattern(f"updated_contents_user_{user_id}_page_*")
+                else:
+                    cache.clear()
 
     @action(methods=["GET"], url_path="updated-contents", detail=False)
     def update_contents(self, request):
