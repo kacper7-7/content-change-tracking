@@ -1,15 +1,10 @@
 from datetime import timedelta
-from xmlrpc.client import ResponseError
-
-from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import transaction
-from django.db.migrations import serializer
 from django.db.models import (
     F,
     Case,
     When,
     Value,
-    Model,
     Exists,
     OuterRef,
     Count,
@@ -69,7 +64,7 @@ class ContentViewSet(viewsets.ModelViewSet):
                         content=OuterRef("pk"), user=self.request.user
                     )
                 ),
-                followers_count=Count(F("followers"), distinct=True),
+                followers_count=Count("followers", distinct=True),
                 recent_edits_count=Count(
                     "edit_history",
                     filter=Q(
